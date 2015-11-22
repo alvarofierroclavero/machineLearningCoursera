@@ -1,0 +1,161 @@
+---
+title: "Machine Learning Project"
+author: "Alvaro Fierro"
+date: "21 de noviembre de 2015"
+output: pdf_document
+---
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+According to this information, the variable «classe» has five possible values: A (correct exercise), B-E (common mistakes).
+
+# Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+## Loading the data
+
+```{r}
+trainData <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+testData <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainFile <- "C:/Users/Usuario/Google Drive/R programming/8. Practical Machine Learning/Project 1/pml-training.csv"
+
+testFile <- "C:/Users/Usuario/Google Drive/R programming/8. Practical Machine Learning/Project 1/pml-testing.csv"
+
+if(!file.exists(trainFile)) {
+        download.file(trainData, destfile = trainFile)
+}
+
+if(!file.exists(testFile)) {
+        download.file(testData, destfile = testFile)
+}
+
+trainn <- read.csv(trainFile)
+test <- read.csv(testFile)
+```
+
+## Loading the libraries
+
+```{r}
+library(plyr)
+library(caret) # Machine learning library
+library(ggplot2)
+library(randomForest) # classification and regression
+library(rpart) # regression partitioning and trees
+library(rpart.plot) #pretty printing trees
+library(rattle)
+
+```
+
+## Preliminary data processing
+
+Train and test data have different columns.
+```{r}
+classe <- names(train)[colnames(train)!=colnames(test)]
+problem_id <- names(test)[colnames(train)!=colnames(test)]
+```
+
+We are going to remove unnecesary and steady columns and detect columns with missing values
+
+```{r}
+# Remove first five columns
+
+trainn <- trainn[,6:dim(trainn)[2]]
+test <- test[,6:dim(test)[2]]
+
+# Select not steady columns
+not_steady <- !nearZeroVar(trainn, saveMetrics = T)$nzv
+trainn <- trainn[,not_steady]
+test <- test[,not_steady]
+
+# Find columns > 70% na values
+nmissing <- function(x) sum(is.na(x))
+few_na<-!colwise(nmissing)(trainn)> 0.7*dim(trainn)[1]
+trainn <- trainn[,few_na]
+test <- test[,few_na]
+
+```
+
+Let us take a look at the subset of variables
+```{r}
+names(trainn)
+```
+
+Select training and cross validation sets.
+
+```{r}
+set.seed(100)
+inTrain <- createDataPartition(y=trainn$classe,p=0.75,list=FALSE)
+
+training <- trainn[inTrain,]
+validation <- trainn[-inTrain,]
+
+```
+
+# Data Modelling
+
+We are going to test the several models and compare the goodness of fit
+
+## Decision Trees
+
+```{r}
+
+model_dt <- rpart(classe ~ ., data=training, method="class")
+predict_dt <- predict(model_dt, validation, type="class")
+conf_dt<-confusionMatrix(predict_dt,validation$classe)
+conf_dt
+rpart.plot(model_dt, extra=102, under = TRUE, faclen=0)
+
+```
+
+**The accuracy of the decision tree is `r conf_dt$overall[[1]]`**.
+
+## Random Forests
+
+```{r}
+set.seed(100)
+model_rf <- randomForest(classe ~ ., data=training, type="class")
+predict_rf <- predict(model_rf, validation)
+conf_rf<-confusionMatrix(predict_rf,validation$classe)
+conf_rf
+
+```
+
+**The accuracy of the random forest is `r conf_rf$overall[[1]]`**.
+
+The comparison between the two methods shows that random forests performs better.
+
+# Test data prediction
+
+```{r}
+predict_rt_test <- predict(model_rf, test)
+predict_rt_test
+```
+
+# Coursera assignment
+```{r}
+predictions <- as.vector(predict_rt_test)
+
+pml_write_files = function(x) {
+    n = length(x)
+    for (i in 1:n) {
+        filename = paste0("problem_id_", i, ".txt")
+        write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+            col.names = FALSE)
+    }
+}
+
+pml_write_files(predictions)
+
+```
